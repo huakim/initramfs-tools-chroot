@@ -1,0 +1,57 @@
+diff --git a/init b/init
+index f820f49..43aa645 100755
+--- a/init
++++ b/init
+@@ -159,6 +159,9 @@ for x in $(cat /proc/cmdline); do
+ 	vlan=*)
+ 		VLAN="${x#vlan=}"
+ 		;;
++	chroot=*)
++		CHROOT="${x#chroot=}"
++		;;
+ 	boot=*)
+ 		BOOT=${x#boot=}
+ 		;;
+diff --git a/scripts/local b/scripts/local
+index acfbe10..e91f96a 100644
+--- a/scripts/local
++++ b/scripts/local
+@@ -217,6 +217,38 @@ local_mount_root()
+ 	# shellcheck disable=SC2086
+ 	mount ${roflag} ${FSTYPE:+-t "${FSTYPE}"} ${ROOTFLAGS} "${ROOT}" "${rootmnt?}"
+ 	mountroot_status="$?"
++    
++    if [ "$CHROOT" ]; then
++		if [ "$mountroot_status" != 0 ]; then
++			if [ ${FSTYPE} = ntfs ] || [ ${FSTYPE} = vfat ]; then
++				panic "
++Could not mount the partition ${ROOT}.
++This could also happen if the file system is not clean because of an operating
++system crash, an interrupted boot process, an improper shutdown, or unplugging
++of a removable device without first unmounting or ejecting it.  To fix this,
++simply reboot into Windows, let it fully start, log in, run 'chkdsk /r', then
++gracefully shut down and reboot back into Windows. After this you should be
++able to reboot again and resume the installation.
++(filesystem = ${FSTYPE}, error code = $mountroot_status)
++"
++			fi
++		fi
++	
++		mkdir -p /host
++		mount -o move ${rootmnt} /host
++
++		if [ ! -d "/host/${CHROOT}" ]; then
++			panic "ALERT!  /host/${CHROOT} does not exist.  Dropping to a shell!"
++		fi
++
++		# FIXME This has no error checking
++		mount --bind "/host/${CHROOT}" ${rootmnt}
++
++		if [ -d ${rootmnt}/host ]; then
++			mount -o move /host ${rootmnt}/host
++		fi
++	fi
++    
+ 	if [ "$LOOP" ]; then
+ 		if [ "$mountroot_status" != 0 ]; then
+ 			if [ "${FSTYPE}" = ntfs ] || [ "${FSTYPE}" = vfat ]
